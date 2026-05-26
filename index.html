@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>対戦相手一覧ツール</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap');
+:root{--gold:#c9a84c;--gold-light:#f0d080;--dark:#1a1008;--parchment:#f5e8c0;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans JP',sans-serif;background:linear-gradient(135deg,#1a1008,#2d1a00,#1a0a00);min-height:100vh;color:#fff;padding:16px;}
+h1{text-align:center;font-size:20px;font-weight:900;color:var(--gold-light);text-shadow:0 0 20px rgba(201,168,76,.5);margin-bottom:4px;letter-spacing:2px;}
+.subtitle{text-align:center;font-size:11px;color:#a08040;margin-bottom:16px;}
+.upload-area{background:rgba(255,255,255,.04);border:2px dashed var(--gold);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:.3s;margin-bottom:16px;}
+.upload-area:hover,.upload-area.drag-over{background:rgba(201,168,76,.12);border-color:var(--gold-light);}
+.upload-area input{display:none;}
+.upload-icon{font-size:36px;margin-bottom:6px;}
+.upload-text{color:var(--gold-light);font-size:14px;font-weight:700;}
+.upload-sub{color:#888;font-size:11px;margin-top:3px;}
+.images-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:16px;}
+.img-thumb{position:relative;border-radius:6px;overflow:hidden;border:2px solid var(--gold);background:#111;aspect-ratio:9/16;}
+.img-thumb img{width:100%;height:100%;object-fit:cover;}
+.img-thumb .rm{position:absolute;top:3px;right:3px;background:rgba(192,57,43,.9);border:none;color:#fff;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.img-thumb .lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);font-size:9px;text-align:center;padding:2px;color:var(--gold-light);}
+.controls{background:rgba(255,255,255,.05);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:14px;margin-bottom:16px;}
+.controls h3{color:var(--gold-light);font-size:12px;margin-bottom:10px;font-weight:700;}
+.ctrl{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+.ctrl label{font-size:11px;color:#ccc;min-width:80px;}
+.ctrl input[type=range]{flex:1;min-width:80px;accent-color:var(--gold);}
+.ctrl span{font-size:11px;color:var(--gold-light);min-width:36px;text-align:right;}
+.ctrl input[type=color]{width:44px;height:26px;border:none;cursor:pointer;border-radius:4px;}
+.btn{display:block;width:100%;padding:13px;background:linear-gradient(135deg,#c9a84c,#f0d080,#c9a84c);border:none;border-radius:10px;font-family:'Noto Sans JP',sans-serif;font-weight:900;font-size:15px;color:var(--dark);cursor:pointer;letter-spacing:2px;transition:.2s;box-shadow:0 4px 15px rgba(201,168,76,.4);margin-bottom:10px;}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(201,168,76,.6);}
+.btn:active{transform:translateY(0);}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.btn-dl{background:linear-gradient(135deg,#1a5276,#2980b9,#1a5276);color:#fff;box-shadow:0 4px 15px rgba(41,128,185,.4);}
+#preview{margin-top:16px;display:none;}
+#preview h3{color:var(--gold-light);font-size:13px;margin-bottom:8px;text-align:center;}
+#out-canvas{width:100%;border:2px solid var(--gold);border-radius:8px;display:block;background:#000;}
+.status{text-align:center;font-size:11px;color:#888;margin:6px 0;min-height:16px;}
+.prog-wrap{background:rgba(255,255,255,.1);border-radius:6px;height:5px;margin:6px 0;overflow:hidden;display:none;}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-light));width:0%;transition:width .3s;border-radius:6px;}
+.tips{background:rgba(26,82,118,.2);border:1px solid rgba(26,82,118,.4);border-radius:8px;padding:10px;font-size:10px;color:#aac;line-height:1.7;margin-bottom:16px;}
+.tips strong{color:#88aaff;}
+</style>
+</head>
+<body>
+<h1>⚔️ 対戦相手一覧ツール</h1>
+<p class="subtitle">DQタクト ギルド大会 予選データを1枚に</p>
+<div class="tips">
+  <strong>使い方：</strong>予選第3試合のスクリーンショットを最大5枚アップロードして「一覧画像を生成」を押してください。各対戦相手カードを自動検出・切り抜きして1枚の画像にまとめます。
+</div>
+<div class="upload-area" id="drop-zone">
+  <input type="file" id="file-input" accept="image/*" multiple>
+  <div class="upload-icon">📸</div>
+  <div class="upload-text">タップして画像を選択</div>
+  <div class="upload-sub">最大5枚・縦長スクリーンショット対応</div>
+</div>
+<div class="images-grid" id="thumbs"></div>
+<div class="controls">
+  <h3>⚙️ 出力設定</h3>
+  <div class="ctrl">
+    <label>列数</label>
+    <input type="range" id="cols" min="2" max="5" value="4">
+    <span id="cols-v">4列</span>
+  </div>
+  <div class="ctrl">
+    <label>カード高さ</label>
+    <input type="range" id="ch" min="60" max="160" value="95" step="5">
+    <span id="ch-v">95px</span>
+  </div>
+  <div class="ctrl">
+    <label>背景色</label>
+    <input type="color" id="bg" value="#140c04">
+    <label style="min-width:auto">文字色</label>
+    <input type="color" id="tc" value="#f0d080">
+  </div>
+</div>
+<button class="btn" id="gen-btn" disabled>⚡ 一覧画像を生成</button>
+<div class="prog-wrap" id="pw"><div class="prog-bar" id="pb"></div></div>
+<div class="status" id="st">画像をアップロードしてください</div>
+<div id="preview">
+  <h3>✅ 生成完了！</h3>
+  <canvas id="out-canvas"></canvas><br>
+  <button class="btn btn-dl" id="dl-btn">💾 画像を保存</button>
+</div>
+<script>
+const dropZone=document.getElementById('drop-zone');
+const fileInput=document.getElementById('file-input');
+const thumbs=document.getElementById('thumbs');
+const genBtn=document.getElementById('gen-btn');
+const dlBtn=document.getElementById('dl-btn');
+const st=document.getElementById('st');
+const canvas=document.getElementById('out-canvas');
+const pw=document.getElementById('pw');
+const pb=document.getElementById('pb');
+const preview=document.getElementById('preview');
+let imgs=[];
+
+dropZone.onclick=()=>fileInput.click();
+dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('drag-over');};
+dropZone.ondragleave=()=>dropZone.classList.remove('drag-over');
+dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('drag-over');loadFiles(e.dataTransfer.files);};
+fileInput.onchange=()=>loadFiles(fileInput.files);
+
+document.getElementById('cols').oninput=function(){document.getElementById('cols-v').textContent=this.value+'列';};
+document.getElementById('ch').oninput=function(){document.getElementById('ch-v').textContent=this.value+'px';};
+
+function loadFiles(files){
+  const arr=[...files].slice(0,5-imgs.length);
+  if(!arr.length){st.textContent='最大5枚まで';return;}
+  let done=0;
+  arr.forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        imgs.push({img,name:f.name});
+        renderThumbs();
+        if(++done===arr.length){st.textContent=`${imgs.length}枚読み込み済み`;genBtn.disabled=false;}
+      };
+      img.src=e.target.result;
+    };
+    r.readAsDataURL(f);
+  });
+}
+
+function renderThumbs(){
+  thumbs.innerHTML='';
+  imgs.forEach((item,i)=>{
+    const d=document.createElement('div');d.className='img-thumb';
+    const im=document.createElement('img');im.src=item.img.src;
+    const lb=document.createElement('div');lb.className='lbl';lb.textContent='画像'+(i+1);
+    const bt=document.createElement('button');bt.className='rm';bt.textContent='✕';
+    bt.onclick=()=>{imgs.splice(i,1);renderThumbs();if(!imgs.length){genBtn.disabled=true;st.textContent='画像をアップロードしてください';}};
+    d.append(im,lb,bt);thumbs.appendChild(d);
+  });
+}
+
+// Detect red badge positions in image
+function detectBadgeRows(imgEl){
+  const w=imgEl.naturalWidth,h=imgEl.naturalHeight;
+  const c=document.createElement('canvas');
+  const scale=Math.min(1,800/w);
+  c.width=w*scale;c.height=h*scale;
+  const ctx=c.getContext('2d');
+  ctx.drawImage(imgEl,0,0,c.width,c.height);
+  const data=ctx.getImageData(0,0,c.width,c.height);
+  const px=data.data;
+  const cw=c.width,ch=c.height;
+  const scanW=Math.floor(cw*0.20);
+  const top=Math.floor(ch*0.38);
+  const bot=Math.floor(ch*0.90);
+  
+  const reds=[];
+  for(let y=top;y<bot;y++){
+    let cnt=0;
+    for(let x=0;x<scanW;x++){
+      const i=(y*cw+x)*4;
+      if(px[i]>150&&px[i+1]<80&&px[i+2]<80)cnt++;
+    }
+    reds.push({y:y/scale,cnt});
+  }
+  
+  const peaks=[];
+  let lastPeak=-999;
+  const minGap=h*0.07;
+  for(let i=5;i<reds.length-5;i++){
+    const {y,cnt}=reds[i];
+    const localMax=Math.max(...reds.slice(Math.max(0,i-3),i+4).map(r=>r.cnt));
+    if(cnt===localMax&&cnt>=35&&y-lastPeak>minGap){
+      peaks.push(y);lastPeak=y;
+    }
+  }
+  return {peaks,origW:w,origH:h,canvas:c,scale};
+}
+
+genBtn.onclick=async()=>{
+  genBtn.disabled=true;preview.style.display='none';
+  pw.style.display='block';pb.style.width='0%';
+  
+  const cols=+document.getElementById('cols').value;
+  const cardH=+document.getElementById('ch').value;
+  const bgColor=document.getElementById('bg').value;
+  const textColor=document.getElementById('tc').value;
+  
+  await sleep(30);
+  
+  const cardW=520;
+  const pad=6;
+  const hdrH=64;
+  const DPR=2;
+  
+  // Collect all card crops
+  const allCards=[];
+  
+  for(let fi=0;fi<imgs.length;fi++){
+    pb.style.width=((fi/imgs.length)*60)+'%';
+    st.textContent=`画像${fi+1}を解析中...`;
+    await sleep(20);
+    
+    const {peaks,origW,origH,canvas:sc,scale}=detectBadgeRows(imgs[fi].img);
+    const cardHSrc=Math.floor(origH*0.087); // ~220px equivalent
+    
+    for(const peakY of peaks){
+      // Crop from source image
+      const cropCanvas=document.createElement('canvas');
+      cropCanvas.width=origW;
+      cropCanvas.height=Math.min(cardHSrc,origH-peakY+10);
+      const cc=cropCanvas.getContext('2d');
+      const y1=Math.max(0,peakY-10);
+      cc.drawImage(imgs[fi].img,0,y1,origW,cardHSrc,0,0,origW,cardHSrc);
+      allCards.push(cropCanvas);
+      if(allCards.length>=20)break;
+    }
+    if(allCards.length>=20)break;
+  }
+  
+  if(!allCards.length){
+    st.textContent='カードを検出できませんでした';
+    genBtn.disabled=false;pw.style.display='none';return;
+  }
+  
+  pb.style.width='70%';
+  st.textContent=`${allCards.length}件検出、画像生成中...`;
+  await sleep(20);
+  
+  const rows=Math.ceil(allCards.length/cols);
+  const totalW=cols*cardW+(cols+1)*pad;
+  const totalH=hdrH+rows*(cardH+pad)+pad;
+  
+  canvas.width=totalW*DPR;canvas.height=totalH*DPR;
+  const ctx=canvas.getContext('2d');
+  ctx.scale(DPR,DPR);
+  
+  // Background
+  ctx.fillStyle=bgColor;ctx.fillRect(0,0,totalW,totalH);
+  
+  // Header
+  const grad=ctx.createLinearGradient(0,0,0,hdrH);
+  grad.addColorStop(0,'rgba(60,36,10,1)');grad.addColorStop(1,bgColor);
+  ctx.fillStyle=grad;ctx.fillRect(0,0,totalW,hdrH);
+  ctx.fillStyle='rgba(201,168,76,1)';ctx.fillRect(0,hdrH-2,totalW,2);
+  ctx.fillStyle=textColor;
+  ctx.font=`bold 24px 'Noto Sans JP',sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('予選第3試合 ー 対戦相手一覧',totalW/2,28);
+  ctx.font=`14px 'Noto Sans JP',sans-serif`;ctx.fillStyle='#a08040';
+  ctx.fillText(`全${allCards.length}名`,totalW/2,50);
+  
+  const badgeColors=[
+    [180,40,30],[180,40,30],[180,40,30],[180,40,30],
+    [130,60,170],[130,60,170],[130,60,170],[130,60,170],
+    [30,110,180],[30,110,180],[30,110,180],[30,110,180],
+    [30,140,70],[30,140,70],[30,140,70],[30,140,70],
+    [200,120,30],[200,120,30],[200,120,30],[200,120,30],
+  ];
+  
+  const badgeR=16;
+  const ovW=Math.floor(cardW*0.115);
+  
+  for(let i=0;i<allCards.length;i++){
+    const col=i%cols,row=Math.floor(i/cols);
+    const x=pad+col*(cardW+pad);
+    const y=hdrH+pad+row*(cardH+pad);
+    const num=i+1;
+    
+    // Draw card image
+    ctx.drawImage(allCards[i],0,0,allCards[i].width,allCards[i].height,x,y,cardW,cardH);
+    
+    // Cover original badge
+    ctx.fillStyle='rgba(14,8,2,1)';
+    ctx.fillRect(x,y,ovW,Math.floor(cardH*0.65));
+    
+    // Badge
+    const [br,bg2,bb2]=badgeColors[Math.min(i,badgeColors.length-1)];
+    const bx=x+badgeR+3,by=y+badgeR+3;
+    ctx.beginPath();ctx.arc(bx,by,badgeR,0,Math.PI*2);ctx.fillStyle=`rgb(${br},${bg2},${bb2})`;ctx.fill();
+    ctx.strokeStyle='rgba(255,245,200,0.9)';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font=`bold 16px 'Noto Sans JP',sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(num,bx,by);
+    
+    // Border
+    ctx.strokeStyle=`rgba(${Math.min(255,br+80)},${Math.min(255,bg2+80)},${Math.min(255,bb2+80)},0.8)`;
+    ctx.lineWidth=2;ctx.strokeRect(x,y,cardW,cardH);
+  }
+  
+  pb.style.width='100%';
+  st.textContent=`✅ ${allCards.length}件の対戦相手を生成しました`;
+  preview.style.display='block';
+  genBtn.disabled=false;pw.style.display='none';
+};
+
+dlBtn.onclick=()=>{
+  const a=document.createElement('a');
+  a.download='対戦相手一覧.png';
+  a.href=canvas.toDataURL('image/png');
+  a.click();
+};
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+</script>
+</body>
+</html>
